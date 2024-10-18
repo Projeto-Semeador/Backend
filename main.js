@@ -7,14 +7,23 @@ const port = 3000;
 app.use(cors());
 app.use(express.json());
 
+// TODO: Remove this on db integration
 var users = []
 var tokens = []
 
+// Returns true if user in database
+function validateUser(user) {
+	if (!users.find((u) => u.username === user.username)){
+		throw new Error(`User not found with name ${user.username}`);
+	}
+
+	return true;
+}
+
+// Creates token for password recovery
 function createRecoveryToken(user) {
 	try {
-		if (!users.find((u) => u.username === user.username)){
-			throw new Error(`User not found with name ${user.username}`);
-		}
+		validateUser(user);
 
 		var token = crypto.randomBytes(16).toString('hex');
 
@@ -26,6 +35,7 @@ function createRecoveryToken(user) {
 	}
 }
 
+// Retrieves token for password recovery
 function retrieveToken(token) {
 	var tokenObj = tokens.find((e) => e.token === token);
 
@@ -33,14 +43,15 @@ function retrieveToken(token) {
 		return false
 	}
 
+	var tkIndex = tokens.indexOf(tokenObj);
+	tokens.splice(tkIndex, 1)
 	return true
 }
 
+// Tries to authenticate the user using the username and password
 function authenticateUser(user) {
 	try {
-		if (!users.find((u) => u.username === user.username)){
-			throw new Error(`User not found with name ${user.username}`);
-		}
+		validateUser(user)
 
 		var selUser = users.find((u) => u.username === user.username);
 		var hashedPasswd = hashPassword(user.password, selUser.salt);
@@ -57,6 +68,7 @@ function authenticateUser(user) {
 	}
 }
 
+// Creates user
 function createUser(user) {
 	var [hashedPasswd, salt] = hashPassword(user.password);
 
@@ -73,6 +85,7 @@ function createUser(user) {
 	};
 }
 
+// Creates hash for password
 function hashPassword(passwd, salt) {
 	if (!salt) {
 		var salt = crypto.randomBytes(32).toString('hex');
@@ -80,14 +93,40 @@ function hashPassword(passwd, salt) {
 	return [crypto.pbkdf2Sync(passwd, salt, 2000, 64, 'sha512').toString('hex'), salt];
 }
 
+app.post("/login", (req, res) => {
+	try {
+		var {user} = req.body 
+
+		if (authenticateUser(user)) {
+			res.status(200).send("Validated");
+		} else {
+			res.status(500).send("Unauthorized");
+		}
+	} catch (err) {
+		res.status(400).send({error: err.message});
+	}
+});
+
+app.post("/register", (req,res) => {
+	try {
+		var {user} = req.body;
+
+		var users = createUser(user);
+
+		res.status(201).send();
+	} catch (err) {
+		res.status(400).send({error: err.message});
+	}
+});
+
 app.get("/recover/:token", (req, res) => {
 	try {
 		var {token} = req.params;
 
 		if(retrieveToken(token)) {
-			res.status(200).send("User recovered");
+			res.status(200).send("Token valid");
 		} else {
-			res.status(400).send("Token not found");
+			res.status(400).send("Token not found or expired");
 		}
 	} catch (err) {
 		res.status(400).send({error: err.message});
@@ -104,32 +143,6 @@ app.post("/recover", (req,res) => {
 			res.status(201).send({token: token});
 		} else {
 			res.status(400).send();
-		}
-	} catch (err) {
-		res.status(400).send({error: err.message});
-	}
-});
-
-app.post("/login/create", (req,res) => {
-	try {
-		var {user} = req.body;
-
-		var users = createUser(user);
-
-		res.status(201).send();
-	} catch (err) {
-		res.status(400).send({error: err.message});
-	}
-});
-
-app.post("/login", (req, res) => {
-	try {
-		var {user} = req.body 
-
-		if (authenticateUser(user)) {
-			res.status(200).send("Validated");
-		} else {
-			res.status(500).send("Unauthorized");
 		}
 	} catch (err) {
 		res.status(400).send({error: err.message});
