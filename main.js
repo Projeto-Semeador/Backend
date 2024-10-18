@@ -8,6 +8,33 @@ app.use(cors());
 app.use(express.json());
 
 var users = []
+var tokens = []
+
+function createRecoveryToken(user) {
+	try {
+		if (!users.find((u) => u.username === user.username)){
+			throw new Error(`User not found with name ${user.username}`);
+		}
+
+		var token = crypto.randomBytes(16).toString('hex');
+
+		tokens.push({ username: user.username, token: token })
+
+		return token;
+	} catch (err) {
+		throw err;
+	}
+}
+
+function retrieveToken(token) {
+	var tokenObj = tokens.find((e) => e.token === token);
+
+	if (tokenObj === undefined) {
+		return false
+	}
+
+	return true
+}
 
 function authenticateUser(user) {
 	try {
@@ -52,6 +79,36 @@ function hashPassword(passwd, salt) {
 	}
 	return [crypto.pbkdf2Sync(passwd, salt, 2000, 64, 'sha512').toString('hex'), salt];
 }
+
+app.get("/recover/:token", (req, res) => {
+	try {
+		var {token} = req.params;
+
+		if(retrieveToken(token)) {
+			res.status(200).send("User recovered");
+		} else {
+			res.status(400).send("Token not found");
+		}
+	} catch (err) {
+		res.status(400).send({error: err.message});
+	}
+});
+
+app.post("/recover", (req,res) => {
+	try {
+		var {user} = req.body;
+
+		var token = createRecoveryToken(user);
+
+		if (token) {
+			res.status(201).send({token: token});
+		} else {
+			res.status(400).send();
+		}
+	} catch (err) {
+		res.status(400).send({error: err.message});
+	}
+});
 
 app.post("/login/create", (req,res) => {
 	try {
