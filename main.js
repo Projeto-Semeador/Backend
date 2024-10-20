@@ -81,7 +81,6 @@ function authenticateUser(user) {
 		var selUser = users.find((u) => u.username === user.username);
 		var hashedPasswd = hashPassword(user.password, selUser.salt);
 
-
 		if (hashedPasswd[0] === selUser.password) {
 			return true
 		} else {
