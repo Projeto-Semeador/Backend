@@ -25,7 +25,22 @@ function validateJWT(token) {
 
 // Creates JWT token using the user's username
 function createJWT(username) {
-	return jwt.sign(username, process.env.SECRET_TOKEN, {expiresIn: "6h"})
+	var token = jwt.sign({username: username}, process.env.SECRET_TOKEN, {expiresIn: '1d'});
+	console.log(token)
+	return token
+}
+
+// Middleware to check if the user is authenticated
+function authenticationMiddleware(req, res, next) {
+	try {
+		// Retrieves the JWT token from the cookie
+		var token = req.cookies.JWT_Auth;
+		// Validates the JWT token
+		validateJWT(token);
+		next();
+	} catch (err) {
+		res.status(401).send({error: "Unauthorized request"});
+	}
 }
 
 // Validate the file mimetype and extension
@@ -149,13 +164,17 @@ app.post("/upload", upload.single("test"), (req, res) => {
 	}
 });
 
+app.get("/secure", authenticationMiddleware, (req, res) => {
+	res.status(200).send("Authorized");
+});
+
 app.post("/login", (req, res) => {
 	try {
 		var {user} = req.body 
-		jwt = authenticateUser(user)
+		var token = authenticateUser(user)
 
-		if (jwt != null) {
-			res.cookie('JWT_Auth', jwt, { maxAge: 900000, httpOnly: true })
+		if (token != null) {
+			res.cookie('JWT_Auth', token, { maxAge: 900000, httpOnly: true })
 			res.status(200).send("Authorized");
 		} else {
 			res.status(500).send("Unauthorized");
