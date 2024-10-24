@@ -1,4 +1,5 @@
 const express = require("express");
+const cookieParser = require("cookie-parser");
 const jwt = require("jsonwebtoken");
 const multer = require("multer");
 const crypto = require("crypto");
@@ -11,7 +12,18 @@ const port = 3000;
 
 app.use(cors());
 app.use(express.json());
+app.use(cookieParser());
 
+// Validates the JWT token
+function validateJWT(token) {
+	try {
+		jwt.verify(token, process.env.SECRET_TOKEN)
+	} catch (err) {
+		throw err
+	}
+}
+
+// Creates JWT token using the user's username
 function createJWT(username) {
 	return jwt.sign(username, process.env.SECRET_TOKEN, {expiresIn: "6h"})
 }
@@ -142,9 +154,9 @@ app.post("/login", (req, res) => {
 		var {user} = req.body 
 		jwt = authenticateUser(user)
 
-		// TODO: Add the JWT in the cookies or the response header
 		if (jwt != null) {
-			res.status(200).send(jwt);
+			res.cookie('JWT_Auth', jwt, { maxAge: 900000, httpOnly: true })
+			res.status(200).send("Authorized");
 		} else {
 			res.status(500).send("Unauthorized");
 		}
