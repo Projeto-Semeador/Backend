@@ -1,11 +1,36 @@
 const express = require("express");
+const multer = require("multer");
 const crypto = require("crypto");
 const cors = require("cors");
+const path = require("path");
 const app = express();
 const port = 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// Validate the file mimetype and extension
+function validateFile(file, cb) {
+	const allowedTypes = /jpeg|jpg|png|webp/;
+	const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+	const mimetype = allowedTypes.test(file.mimetype);
+
+	if (extname && mimetype) {
+		return cb(null, true);
+	} else {
+		cb("Invalid file type");
+	}
+}
+
+// Set storage properties for mutlter
+const storage = multer.diskStorage({
+	destination: "./uploads/",
+	filename: (_, file, cb) => {
+		cb(null, file.fieldname + '-' + Date.now() + path.extname(file.originalname));
+	}
+})
+
+const upload = multer({ dest: 'uploads/', fileFilter: (_, file, cb) => validateFile(file, cb), storage })
 
 // TODO: Remove this on db integration
 var users = []
@@ -56,7 +81,6 @@ function authenticateUser(user) {
 		var selUser = users.find((u) => u.username === user.username);
 		var hashedPasswd = hashPassword(user.password, selUser.salt);
 
-
 		if (hashedPasswd[0] === selUser.password) {
 			return true
 		} else {
@@ -93,6 +117,14 @@ function hashPassword(passwd, salt) {
 	return [crypto.pbkdf2Sync(passwd, salt, 2000, 64, 'sha512').toString('hex'), salt];
 }
 
+app.post("/upload", upload.single("test"), (req, res) => {
+	try {
+		res.status(200).send("Uploaded");	
+	} catch (err) {
+		res.send(400).send({error: err.message })
+	}
+});
+
 app.post("/login", (req, res) => {
 	try {
 		var {user} = req.body 
@@ -111,7 +143,7 @@ app.post("/register", (req,res) => {
 	try {
 		var {user} = req.body;
 
-		var users = createUser(user);
+		createUser(user);
 
 		res.status(201).send();
 	} catch (err) {
