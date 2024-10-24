@@ -1,13 +1,20 @@
 const express = require("express");
+const jwt = require("jsonwebtoken");
 const multer = require("multer");
 const crypto = require("crypto");
 const cors = require("cors");
 const path = require("path");
+const { readFileSync } = require("fs");
+require("dotenv").config()
 const app = express();
 const port = 3000;
 
 app.use(cors());
 app.use(express.json());
+
+function createJWT(username) {
+	return jwt.sign(username, process.env.SECRET_TOKEN, {expiresIn: "6h"})
+}
 
 // Validate the file mimetype and extension
 function validateFile(file, cb) {
@@ -82,7 +89,7 @@ function authenticateUser(user) {
 		var hashedPasswd = hashPassword(user.password, selUser.salt);
 
 		if (hashedPasswd[0] === selUser.password) {
-			return true
+			return createJWT(user.username) 
 		} else {
 			throw new Error("Invalid password");
 		}
@@ -119,7 +126,12 @@ function hashPassword(passwd, salt) {
 
 app.post("/upload", upload.single("test"), (req, res) => {
 	try {
-		res.status(200).send("Uploaded");	
+		// Check if file was actually uploaded to the server
+		if (readFileSync(req.file.path)) {
+			res.status(200).send("Uploaded");		
+		} else {
+			throw new Error("File was not uploaded successfully")
+		}
 	} catch (err) {
 		res.send(400).send({error: err.message })
 	}
@@ -128,9 +140,11 @@ app.post("/upload", upload.single("test"), (req, res) => {
 app.post("/login", (req, res) => {
 	try {
 		var {user} = req.body 
+		jwt = authenticateUser(user)
 
-		if (authenticateUser(user)) {
-			res.status(200).send("Validated");
+		// TODO: Add the JWT in the cookies or the response header
+		if (jwt != null) {
+			res.status(200).send(jwt);
 		} else {
 			res.status(500).send("Unauthorized");
 		}
