@@ -9,10 +9,13 @@ const { readFileSync } = require("fs");
 require("dotenv").config()
 const app = express();
 const port = 3000;
+const Logger = require("./util/logger");
+const logger = new Logger(false, true);
 
 app.use(cors());
 app.use(express.json());
 app.use(cookieParser());
+app.use(logger.logRequest.bind(logger));
 
 // Validates the JWT token
 function validateJWT(token) {
@@ -151,7 +154,7 @@ function hashPassword(passwd, salt) {
 	return [crypto.pbkdf2Sync(passwd, salt, 2000, 64, 'sha512').toString('hex'), salt];
 }
 
-app.post("/upload", upload.single("test"), (req, res) => {
+app.post("/upload", authenticationMiddleware, upload.single("test"), (req, res) => {
 	try {
 		// Check if file was actually uploaded to the server
 		if (readFileSync(req.file.path)) {
