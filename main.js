@@ -8,15 +8,18 @@ const cors = require("cors");
 const path = require("path");
 const { readFileSync } = require("fs");
 const Logger = require("./util/logger");
-const logger = new Logger();
 
+const logger = new Logger();
 const app = express();
 const port = 3000;
 
 app.use(cors());
 app.use(express.json());
 app.use(cookieParser());
-app.use(logger.logRequest.bind(logger));
+
+if (process.env.LOGGING === "true") {
+	app.use(logger.logRequest.bind(logger));
+}
 
 // Validates the JWT token
 function validateJWT(token) {
@@ -183,7 +186,7 @@ app.post("/login", (req, res) => {
 			res.status(500).send("Unauthorized");
 		}
 	} catch (err) {
-		res.status(400).send({error: err.message});
+		res.status(500).send();
 	}
 });
 
