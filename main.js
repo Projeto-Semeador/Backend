@@ -1,13 +1,50 @@
+require("dotenv").config()
 const express = require("express");
+const cookieParser = require("cookie-parser");
+const jwt = require("jsonwebtoken");
 const multer = require("multer");
 const crypto = require("crypto");
 const cors = require("cors");
 const path = require("path");
+const { readFileSync } = require("fs");
+const Logger = require("./util/logger");
+const logger = new Logger();
+
 const app = express();
 const port = 3000;
 
 app.use(cors());
 app.use(express.json());
+app.use(cookieParser());
+app.use(logger.logRequest.bind(logger));
+
+// Validates the JWT token
+function validateJWT(token) {
+	try {
+		jwt.verify(token, process.env.SECRET_TOKEN)
+	} catch (err) {
+		throw err
+	}
+}
+
+// Creates JWT token using the user's username
+function createJWT(username) {
+	var token = jwt.sign({username: username}, process.env.SECRET_TOKEN, {expiresIn: '1d'});
+	return token
+}
+
+// Middleware to check if the user is authenticated
+function authenticationMiddleware(req, res, next) {
+	try {
+		// Retrieves the JWT token from the cookie
+		var token = req.cookies.JWT_Auth;
+		// Validates the JWT token
+		validateJWT(token);
+		next();
+	} catch (err) {
+		res.status(401).send({error: "Unauthorized request"});
+	}
+}
 
 // Validate the file mimetype and extension
 function validateFile(file, cb) {
@@ -82,7 +119,7 @@ function authenticateUser(user) {
 		var hashedPasswd = hashPassword(user.password, selUser.salt);
 
 		if (hashedPasswd[0] === selUser.password) {
-			return true
+			return createJWT(user.username) 
 		} else {
 			throw new Error("Invalid password");
 		}
@@ -117,20 +154,31 @@ function hashPassword(passwd, salt) {
 	return [crypto.pbkdf2Sync(passwd, salt, 2000, 64, 'sha512').toString('hex'), salt];
 }
 
-app.post("/upload", upload.single("test"), (req, res) => {
+app.post("/upload", authenticationMiddleware, upload.single("test"), (req, res) => {
 	try {
-		res.status(200).send("Uploaded");	
+		// Check if file was actually uploaded to the server
+		if (readFileSync(req.file.path)) {
+			res.status(200).send("Uploaded");		
+		} else {
+			throw new Error("File was not uploaded successfully")
+		}
 	} catch (err) {
 		res.send(400).send({error: err.message })
 	}
 });
 
+app.get("/secure", authenticationMiddleware, (req, res) => {
+	res.status(200).send("Authorized");
+});
+
 app.post("/login", (req, res) => {
 	try {
 		var {user} = req.body 
+		var token = authenticateUser(user)
 
-		if (authenticateUser(user)) {
-			res.status(200).send("Validated");
+		if (token != null) {
+			res.cookie('JWT_Auth', token, { maxAge: 900000, httpOnly: true })
+			res.status(200).send("Authorized");
 		} else {
 			res.status(500).send("Unauthorized");
 		}
