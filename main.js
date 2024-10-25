@@ -1,3 +1,4 @@
+require("dotenv").config()
 const express = require("express");
 const cookieParser = require("cookie-parser");
 const jwt = require("jsonwebtoken");
@@ -6,11 +7,11 @@ const crypto = require("crypto");
 const cors = require("cors");
 const path = require("path");
 const { readFileSync } = require("fs");
-require("dotenv").config()
+const Logger = require("./util/logger");
+const logger = new Logger();
+
 const app = express();
 const port = 3000;
-const Logger = require("./util/logger");
-const logger = new Logger(false, true);
 
 app.use(cors());
 app.use(express.json());
@@ -29,7 +30,6 @@ function validateJWT(token) {
 // Creates JWT token using the user's username
 function createJWT(username) {
 	var token = jwt.sign({username: username}, process.env.SECRET_TOKEN, {expiresIn: '1d'});
-	console.log(token)
 	return token
 }
 

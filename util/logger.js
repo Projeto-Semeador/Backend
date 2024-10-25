@@ -1,31 +1,61 @@
 const fs = require('node:fs');
+const chalk = require('chalk');
+const { type } = require('node:os');
 
 // Class to log messages to the console and a file
 class Logger {
+    #logFolder = './logs';
     #currentFile = '';
-
-    /**  
-        * @type {boolean} 
-        * @private
-        * @default true
-        * @description Whether or not to log messages to a file 
-    **/
     #fileLogging = true;
-
-    /**
-         * @type {boolean}
-         * @private
-         * @default true
-         * @description Whether or not to log messages to the console
-    **/
     #consoleLogging = true;
+    
+    // Creates a new log file if one does not exist for the current day
+    #createFile() {
+        if (!this.#fileLogging) {
+            return;
+        }
+
+        if (!fs.existsSync(this.#logFolder)) {
+            fs.mkdirSync(this.#logFolder);
+        }
+
+        // Check if there is any log file in the logs directory from today
+        var timestamp = new Date().toISOString().replace(/:/g, '-');
+        var logFiles = fs.readdirSync(this.#logFolder);
+        var found = false;
+
+        for (var i = 0; i < logFiles.length; i++) {
+            if (logFiles[i].includes(timestamp.split('T')[0])) {
+                this.#currentFile = `${this.#logFolder}/${logFiles[i]}`;
+                found = true;
+                break;
+            }
+        }
+
+        // If no log file was found, create a new one
+        if (!found) {
+            this.#currentFile = `${this.#logFolder}/${timestamp}.log`;
+            fs.writeFileSync(this.#currentFile, '');
+        }
+    }
 
     // Writes the log message to a file 
     #writeToFile(log) {
         if (!this.#fileLogging) {
             return;
         }
-        fs.appendFileSync(this.#currentFile, log);
+
+        var logString = '';
+
+        if (log.type === 'request') {
+            logString = `${log.timestamp} - [${log.method}] ${log.url} - ${log.ip}`;
+        } else if (log.type === 'response') {
+            logString = `${log.timestamp} - [${log.method}] ${log.url} - ${log.ip} - ${log.status}`;
+        } else {
+            logString = `${log.timestamp} - ${log.message}`;
+        }
+
+        fs.appendFileSync(this.#currentFile, logString + '\n');
     }
 
     // Writes the log message to the console
@@ -34,7 +64,37 @@ class Logger {
             return;
         }
 
-        console.log(log);
+        var method = '';
+
+        switch (log.method) {
+            case 'GET':
+                method = chalk.green(log.method);
+                break;
+            case 'POST':
+                method = chalk.blue(log.method);
+                break;
+            case 'PUT':
+                method = chalk.yellow(log.method);
+                break;
+            case 'DELETE':
+                method = chalk.red(log.method);
+                break;
+            default:
+                method = chalk.white(log.method);
+                break;
+        }
+
+        var logString = '';
+
+        if (log.type === 'request') {
+            logString = `${log.timestamp} - [${method}] ${log.url} - ${log.ip}`;
+        } else if (log.type === 'response') {
+            logString = `${log.timestamp} - [${method}] ${log.url} - ${log.ip} - ${log.status}`;
+        } else {
+            logString = `${log.timestamp} - ${log.message}`;
+        }
+
+        console.log(logString);
     }
 
     /**
@@ -45,8 +105,11 @@ class Logger {
      * @returns {void}
     **/
     logMessage(message) {
-        var timestamp = new Date().toISOString();
-        var log = `${timestamp} - ${message}`;
+        var log = {
+            type: 'message',
+            timestamp: new Date().toISOString(),
+            message: message,
+        }
 
         this.#writeToFile(log);
         this.#writeToConsole(log);
@@ -64,59 +127,58 @@ class Logger {
     logRequest(req, res, next) {
         var timestamp = new Date().toISOString();
         var method = req.method;
-        var additional = '';
 
-        switch (method) {
-            case 'GET':
-                method = '\x1b[32m' + method + '\x1b[0m';
-                break;
-            case 'POST':
-                method = '\x1b[34m' + method + '\x1b[0m';
-                additional = ` - ${JSON.stringify(req.body)}`;
-                break;
-            case 'PUT':
-                method = '\x1b[33m' + method + '\x1b[0m';
-                additional = ` - ${JSON.stringify(req.body)}`;
-                break;
-            case 'DELETE':
-                method = '\x1b[31m' + method + '\x1b[0m';
-                break;
+        var log = {
+            type: 'request',
+            timestamp: timestamp,
+            method: method,
+            url: req.url,
+            body: req.body,
+            query: req.query,
+            params: req.params,
+            headers: req.headers,
+            ip: req.ip,
         }
-
-        var log = `${timestamp} [${method}] - ${req.path} - ${req.ip}` + additional + '\n';
 
         this.#writeToFile(log);
         this.#writeToConsole(log);
+
+        res.on('finish', () => {
+            var responseLog = {
+                type: 'response',
+                timestamp: new Date().toISOString(),
+                method: method,
+                url: req.url,
+                ip: req.ip,
+                status: res.statusCode,
+                headers: res.getHeaders(),
+            };
+
+            this.#writeToFile(responseLog);
+            this.#writeToConsole(responseLog);
+        });
+
         next();
+
     }
 
     /** 
      * @param {boolean} fileLogging Whether or not to log messages to a file
      * @param {boolean} consoleLogging Whether or not to log messages to the console
+     * @param {string} logFolder The folder to store the log files
      * @description Initializes the logger
      * @example
      * const Logger = require('./util/logger');
-     * const logger = new Logger(false, true);
+     * const logger = new Logger(false, true, './logs');
      * @returns {Logger} 
      **/
-    constructor(
-        fileLogging = true,
-        consoleLogging = true
-    ) {
+    constructor(fileLogging = true, consoleLogging = true, logFolder = './logs') {
         this.#fileLogging = fileLogging;
         this.#consoleLogging = consoleLogging;
+        this.#logFolder = logFolder;
 
-        if (!fs.existsSync('./logs') && this.#fileLogging) {
-            fs.mkdirSync('./logs');
-        }
-
-        if (this.#fileLogging) {
-            var timestamp = new Date().toISOString();
-            timestamp = timestamp.replace(/:/g, '-');
-
-            this.#currentFile = './logs/' + `${timestamp}` + '.log';
-            this.#writeToFile(`${timestamp} - Logger initialized\n`);
-        }
+        this.#createFile();
+        this.logMessage('Logger initialized');
     }
 }
 
