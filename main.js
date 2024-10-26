@@ -7,7 +7,7 @@ const crypto = require("crypto");
 const cors = require("cors");
 const path = require("path");
 const { readFileSync } = require("fs");
-const Logger = require("./util/logger");
+const Logger = require("logosaurus");
 
 const logger = new Logger();
 const app = express();
@@ -233,7 +233,7 @@ app.post("/recover", (req,res) => {
 });
 
 app.listen(port, () => {
-	console.log(`Example app listening at http://localhost:${port}`);
+	logger.info(`Example app listening at http://localhost:${port}`);
 });
 
 module.exports = app;
