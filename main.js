@@ -6,12 +6,13 @@ const multer = require("multer");
 const crypto = require("crypto");
 const cors = require("cors");
 const path = require("path");
-const { readFileSync } = require("fs");
+const { readFileSync, rmSync } = require("fs");
 const Logger = require("logosaurus");
 
 const logger = new Logger();
 const app = express();
 const port = 3000;
+const serverURL = `http://localhost:${port}`
 
 app.use(cors());
 app.use(express.json());
@@ -19,6 +20,71 @@ app.use(cookieParser());
 
 if (process.env.LOGGING === "true") {
 	app.use(logger.logRequest.bind(logger));
+}
+
+// TODO: Remove this on db integration
+var users = []
+var tokens = []
+var events = []
+
+// Creates event
+function createEvent(event) {
+	var newEvent = {id: events.length + 1, ...event, likeCount: 0}
+	events.push(newEvent)
+	return newEvent
+}
+
+// Deletes event
+function deleteEvent(eventID) {
+	var event = events.find((e) => e.id == eventID); 
+
+	if (event !== undefined) {
+		// Convert network path to local and delete image
+		rmSync(event.imageURL.replace(serverURL, "."))
+		events.splice(events.indexOf(event), 1);
+	} else {
+		throw new Error("Event not found")
+	}
+}
+
+// Updates event
+function updateEvent(eventID, changes) {
+	var event = events.find((e) => e.id == eventID);
+
+	if (event !== undefined) {
+		var updatedEvent = {...event, ...changes}
+		events[events.indexOf(event)] = updatedEvent;
+		return updatedEvent
+	} else {
+		throw new Error("Event not found");
+	}
+}
+
+// Updates event image
+function updateEventImage(eventID, newImage) {
+	var event = events.find((e) => e.id == eventID);
+	
+	if (event !== undefined) {
+		// Delete old image
+		rmSync(event.imageURL.replace(serverURL, "."))
+		var updatedEvent = {...event, imageURL: newImage}
+		events[events.indexOf(event)] = updatedEvent;
+		return updatedEvent
+	} else {
+		throw new Error("Event not found");
+	}
+}
+
+// Likes the event
+function likeEvent(eventID) {
+	var event = events.find((e) => e.id == eventID);
+
+	if (event !== undefined) {
+		var updatedEvent = {...event, likeCount: event.likeCount + 1}
+		events[events.indexOf(event)] = updatedEvent;
+	} else {
+		throw new Error("Event not found");
+	}
 }
 
 // Validates the JWT token
@@ -45,7 +111,7 @@ function authenticationMiddleware(req, res, next) {
 		validateJWT(token);
 		next();
 	} catch (err) {
-		res.status(401).send({error: "Unauthorized request"});
+		res.status(401).redirect('/login');
 	}
 }
 
@@ -71,10 +137,6 @@ const storage = multer.diskStorage({
 })
 
 const upload = multer({ dest: 'uploads/', fileFilter: (_, file, cb) => validateFile(file, cb), storage })
-
-// TODO: Remove this on db integration
-var users = []
-var tokens = []
 
 // Returns true if user in database
 function validateUser(user) {
@@ -161,17 +223,69 @@ app.post("/upload", authenticationMiddleware, upload.single("test"), (req, res) 
 	try {
 		// Check if file was actually uploaded to the server
 		if (readFileSync(req.file.path)) {
-			res.status(200).send("Uploaded");		
+			res.status(200).json("Uploaded");		
 		} else {
 			throw new Error("File was not uploaded successfully")
 		}
 	} catch (err) {
-		res.send(400).send({error: err.message })
+		res.status(400).send({error: err.message })
 	}
 });
 
 app.get("/secure", authenticationMiddleware, (req, res) => {
-	res.status(200).send("Authorized");
+	res.status(200).json("Authorized");
+});
+
+app.get("/events", (req, res) => {
+	res.status(200).json(events);
+});
+
+app.post("/events", authenticationMiddleware, upload.single("event"), (req, res) => {
+	try {
+		var event = req.body
+		event = {imageURL: `${serverURL}/${req.file.path}`, ...event}
+		res.status(201).json(createEvent(event))
+	} catch (err) {
+		res.status(500).json({error: err.message})
+	}
+});
+
+app.delete("/events/:id", authenticationMiddleware, (req, res) => {
+	try {
+		var eventID = req.params.id
+		deleteEvent(eventID)
+		res.status(200).json(events)
+	} catch (err) {
+		res.status(500).json({error: err.message})
+	}
+});
+
+app.patch("/events/:id", authenticationMiddleware, (req, res) => {
+	try {
+		var eventID = req.params.id
+		res.status(200).json(updateEvent(eventID, req.body))
+	} catch (err) {
+		res.status(500).json({error: err.message})
+	}
+});
+
+app.patch("/events/image/:id", authenticationMiddleware, upload.single("event"), (req, res) => {
+	try {
+		var eventID = req.params.id
+		res.status(200).json(updateEventImage(eventID, `${serverURL}/${req.file.path}`))
+	} catch (err) {
+		res.status(500).json({error: err.message})
+	}
+});
+
+app.patch("/events/like/:id", authenticationMiddleware, (req, res) => {
+	try {
+		var eventID = req.params.id
+		likeEvent(eventID)
+		res.status(200).send()
+	} catch (err) {
+		res.status(500).json({error: err.message})
+	}
 });
 
 app.post("/login", (req, res) => {
@@ -181,12 +295,12 @@ app.post("/login", (req, res) => {
 
 		if (token != null) {
 			res.cookie('JWT_Auth', token, { maxAge: 900000, httpOnly: true })
-			res.status(200).send("Authorized");
+			res.status(200).json("Authorized");
 		} else {
-			res.status(500).send("Unauthorized");
+			res.status(500).json("Unauthorized");
 		}
 	} catch (err) {
-		res.status(500).send();
+		res.status(500).json();
 	}
 });
 
@@ -196,9 +310,9 @@ app.post("/register", (req,res) => {
 
 		createUser(user);
 
-		res.status(201).send();
+		res.status(201).json();
 	} catch (err) {
-		res.status(400).send({error: err.message});
+		res.status(400).json({error: err.message});
 	}
 });
 
@@ -207,12 +321,12 @@ app.get("/recover/:token", (req, res) => {
 		var {token} = req.params;
 
 		if(retrieveToken(token)) {
-			res.status(200).send("Token valid");
+			res.status(200).json("Token valid");
 		} else {
-			res.status(400).send("Token not found or expired");
+			res.status(400).json("Token not found or expired");
 		}
 	} catch (err) {
-		res.status(400).send({error: err.message});
+		res.status(400).json({error: err.message});
 	}
 });
 
@@ -223,17 +337,17 @@ app.post("/recover", (req,res) => {
 		var token = createRecoveryToken(user);
 
 		if (token) {
-			res.status(201).send({token: token});
+			res.status(201).json({token: token});
 		} else {
-			res.status(400).send();
+			res.status(400).json();
 		}
 	} catch (err) {
-		res.status(400).send({error: err.message});
+		res.status(400).json({error: err.message});
 	}
 });
 
 app.listen(port, () => {
-	logger.info(`Example app listening at http://localhost:${port}`);
+	logger.info(`Backend listening at ${serverURL}`);
 });
 
 module.exports = app;
