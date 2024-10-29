@@ -14,7 +14,11 @@ const app = express();
 const port = 3000;
 const serverURL = `http://localhost:${port}`
 
-app.use(cors());
+app.use(cors(
+	{
+		credentials: true, origin: true, exposedHeaders: ["Set-Cookie"]
+	}
+));
 app.use(express.json());
 app.use(cookieParser());
 
@@ -23,7 +27,13 @@ if (process.env.LOGGING === "true") {
 }
 
 // TODO: Remove this on db integration
-var users = []
+var users = [
+	{
+		"username": 'admin@admin.com',
+		"password": '0a9ea0783f64c6a7392b5e71eaeeb21feb9862919122af39c5fb9cff294052357586ba1371a3dcd29b061308de5d9618e697545e09a85c1a01c29ae3a9a10325',
+		"salt": '7669ea8e988dbe140ef08a86aaee0e875179f9274d3a0689253431bb971c5cbe'
+	}
+]
 var tokens = []
 var events = []
 
@@ -106,7 +116,7 @@ function createJWT(username) {
 function authenticationMiddleware(req, res, next) {
 	try {
 		// Retrieves the JWT token from the cookie
-		var token = req.cookies.JWT_Auth;
+		var token = req.cookies.jwtToken;
 		// Validates the JWT token
 		validateJWT(token);
 		next();
@@ -290,17 +300,16 @@ app.patch("/events/like/:id", authenticationMiddleware, (req, res) => {
 
 app.post("/login", (req, res) => {
 	try {
-		var {user} = req.body 
+		var user = req.body;
 		var token = authenticateUser(user)
 
-		if (token != null) {
-			res.cookie('JWT_Auth', token, { maxAge: 900000, httpOnly: true })
-			res.status(200).json("Authorized");
-		} else {
-			res.status(500).json("Unauthorized");
+		if (req.body.remember) {
+			res.cookie('jwtToken', token, { maxAge: 900000, httpOnly: true, secure: false });
 		}
+
+		res.status(200).send();
 	} catch (err) {
-		res.status(500).json();
+		res.status(401).json({error: "Invalid credentials"});
 	}
 });
 
