@@ -169,7 +169,6 @@ app.post("/login", (req, res) => {
 	try {
 		var user = req.body;
 		var token = userHandler.authenticateUser(user)
-		console.log(token);
 		
 		res.cookie('jwtToken', token, { maxAge: 7 * 24 * 60 * 60 * 60 * 1000, expires: 7 * 24 * 60 * 60 * 60 * 1000, httpOnly: true, secure: false });
 		
