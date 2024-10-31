@@ -31,11 +31,27 @@ var users = [
 	{
 		"username": 'admin@admin.com',
 		"password": '0a9ea0783f64c6a7392b5e71eaeeb21feb9862919122af39c5fb9cff294052357586ba1371a3dcd29b061308de5d9618e697545e09a85c1a01c29ae3a9a10325',
-		"salt": '7669ea8e988dbe140ef08a86aaee0e875179f9274d3a0689253431bb971c5cbe'
+		"salt": '7669ea8e988dbe140ef08a86aaee0e875179f9274d3a0689253431bb971c5cbe',
+		"role": "admin"
 	}
 ]
 var tokens = []
-var events = []
+var events = [
+	{
+		"id": 1,
+		"name": "Evento 1",
+		"description": "Descrição do evento 1",
+		"likeCount": 10,
+		"imageURL": "http://localhost:3000/uploads/event-1631877280854.png",
+	},
+	{
+		"id": 2,
+		"name": "Evento 2",
+		"description": "Descrição do evento 2",
+		"likeCount": 5,
+		"imageURL": "http://localhost:3000/uploads/event-1631877280854.png",
+	}
+]
 
 // Creates event
 function createEvent(event) {
@@ -106,9 +122,9 @@ function validateJWT(token) {
 	}
 }
 
-// Creates JWT token using the user's username
-function createJWT(username) {
-	var token = jwt.sign({username: username}, process.env.SECRET_TOKEN, {expiresIn: '1d'});
+// Creates JWT token using the user's username and role
+function createJWT(username, role) {
+	var token = jwt.sign({username: username, role: role}, process.env.SECRET_TOKEN, {expiresIn: '1d'});
 	return token
 }
 
@@ -157,6 +173,23 @@ function validateUser(user) {
 	return true;
 }
 
+// Deletes user from database
+function deleteUser(user) {
+	try {
+		validateUser(user);
+
+		var selUser = users.find((u) => u.username === user.username);
+		
+		if (selUser.role === "admin") {
+			throw new Error("Cannot delete admin user");
+		}
+		
+		users.splice(users.indexOf(selUser), 1)
+	} catch (err) {
+		throw err;
+	}
+}
+
 // Creates token for password recovery
 function createRecoveryToken(user) {
 	try {
@@ -194,7 +227,7 @@ function authenticateUser(user) {
 		var hashedPasswd = hashPassword(user.password, selUser.salt);
 
 		if (hashedPasswd[0] === selUser.password) {
-			return createJWT(user.username) 
+			return createJWT(user.username, user.role);
 		} else {
 			throw new Error("Invalid password");
 		}
@@ -213,7 +246,7 @@ function createUser(user) {
 			throw new Error("User already exists");
 		}
 
-		users.push({ username: user.username, password: hashedPasswd, salt: salt });
+		users.push({ username: user.username, password: hashedPasswd, salt: salt, role: user.role });
 
 		return users;
 	} catch(error) {
@@ -228,6 +261,49 @@ function hashPassword(passwd, salt) {
 	}
 	return [crypto.pbkdf2Sync(passwd, salt, 2000, 64, 'sha512').toString('hex'), salt];
 }
+
+app.get("/analytics", authenticationMiddleware, (req, res) => {
+	var mostLiked = events.sort((a, b) => b.likeCount - a.likeCount)[0]
+	var top5 = events.sort((a, b) => b.likeCount - a.likeCount).slice(0, 5)
+
+	var top5Chart = top5.map((e) => { return {name: e.name, value: e.likeCount} })
+
+	var analytics = [
+		{
+			"metric": "Users",
+			"value": users.length,
+			"name": "Usuários",
+			"description": "Total de usuarios cadastrados"
+		},
+		{
+			"metric": "Events",
+			"value": events.length,
+			"name": "Eventos",
+			"description": "Total de eventos cadastrados"
+		},
+		{
+			"metric": "Likes",
+			"value": events.reduce((acc, e) => acc + e.likeCount, 0),
+			"name": "Likes",
+			"description": "Total de likes em eventos"
+		},
+		{
+			"metric": "MostLiked",
+			"value": mostLiked === undefined ? "N/A" : mostLiked.name,
+			"name": "Evento mais curtido",
+			"description": "Evento com mais likes"
+		},
+		{
+			"metric": "Top5",
+			"value": top5Chart,
+			"name": "Top 5",
+			"type": "chart",
+			"description": "Top 5 eventos"
+		}
+	];
+
+	res.status(200).json(analytics);
+});
 
 app.post("/upload", authenticationMiddleware, upload.single("test"), (req, res) => {
 	try {
@@ -295,6 +371,20 @@ app.patch("/events/like/:id", authenticationMiddleware, (req, res) => {
 		res.status(200).send()
 	} catch (err) {
 		res.status(500).json({error: err.message})
+	}
+});
+
+app.get("/users", authenticationMiddleware, (req, res) => {
+	res.status(200).json(users);
+});
+
+app.delete("/users/:username", authenticationMiddleware, (req, res) => {
+	try {
+		var {username} = req.params;
+		deleteUser({username: username});
+		res.status(200).json();
+	} catch (err) {
+		res.status(400).json({error: err.message});
 	}
 });
 
