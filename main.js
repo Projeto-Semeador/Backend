@@ -250,7 +250,7 @@ app.get("/events", (req, res) => {
 	res.status(200).json(events);
 });
 
-app.post("/events", authenticationMiddleware, upload.single("event"), (req, res) => {
+app.post("/events", authenticationMiddleware, upload.single("image"), (req, res) => {
 	try {
 		var event = req.body
 		event = {imageURL: `${serverURL}/${req.file.path}`, ...event}
@@ -304,7 +304,7 @@ app.post("/login", (req, res) => {
 		var token = authenticateUser(user)
 
 		if (req.body.remember) {
-			res.cookie('jwtToken', token, { maxAge: 900000, httpOnly: true, secure: false });
+			res.cookie('jwtToken', token, { maxAge: 7 * 24 * 60 * 60 * 60 * 1000, expires: 7 * 24 * 60 * 60 * 60 * 1000, httpOnly: true, secure: false });
 		}
 
 		res.status(200).send();
