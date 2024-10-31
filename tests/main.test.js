@@ -30,7 +30,7 @@ describe("POST /login", () => {
   });
 
   it("should return unauthorized", async () => {
-    return await request(app).post("/login").send({ user: { username: "testuser", password: "wrongpassword" } }).expect(500);
+    return await request(app).post("/login").send({ user: { username: "testuser", password: "wrongpassword" } }).expect(401);
   });
 })
 

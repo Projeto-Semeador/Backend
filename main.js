@@ -1,19 +1,29 @@
 require("dotenv").config()
 const express = require("express");
 const cookieParser = require("cookie-parser");
-const jwt = require("jsonwebtoken");
 const multer = require("multer");
-const crypto = require("crypto");
-const cors = require("cors");
 const path = require("path");
+const cors = require("cors");
 const { readFileSync } = require("fs");
 const Logger = require("logosaurus");
+const UserHandler = require("./util/userHandler");
+const EventHandler = require("./util/eventHandler");
+const LocalStorageHandler = require("./util/localStorageHandler");
 
 const logger = new Logger();
 const app = express();
 const port = 3000;
+const serverURL = `http://localhost:${port}`
 
-app.use(cors());
+const localStorageHandler = new LocalStorageHandler(`./uploads/`);
+const userHandler = new UserHandler();
+const eventHandler = new EventHandler(localStorageHandler);
+
+app.use(cors(
+	{
+		credentials: true, origin: true, exposedHeaders: ["Set-Cookie"]
+	}
+));
 app.use(express.json());
 app.use(cookieParser());
 
@@ -21,31 +31,16 @@ if (process.env.LOGGING === "true") {
 	app.use(logger.logRequest.bind(logger));
 }
 
-// Validates the JWT token
-function validateJWT(token) {
-	try {
-		jwt.verify(token, process.env.SECRET_TOKEN)
-	} catch (err) {
-		throw err
-	}
-}
-
-// Creates JWT token using the user's username
-function createJWT(username) {
-	var token = jwt.sign({username: username}, process.env.SECRET_TOKEN, {expiresIn: '1d'});
-	return token
-}
-
 // Middleware to check if the user is authenticated
 function authenticationMiddleware(req, res, next) {
 	try {
 		// Retrieves the JWT token from the cookie
-		var token = req.cookies.JWT_Auth;
+		var token = req.cookies.jwtToken;
 		// Validates the JWT token
-		validateJWT(token);
+		userHandler.validateJWT(token);
 		next();
 	} catch (err) {
-		res.status(401).send({error: "Unauthorized request"});
+		res.status(401).redirect('/login');
 	}
 }
 
@@ -72,133 +67,126 @@ const storage = multer.diskStorage({
 
 const upload = multer({ dest: 'uploads/', fileFilter: (_, file, cb) => validateFile(file, cb), storage })
 
-// TODO: Remove this on db integration
-var users = []
-var tokens = []
+app.get("/analytics", authenticationMiddleware, (req, res) => {
+	var events = eventHandler.getEvents()
+	var users = userHandler.getUsers()
 
-// Returns true if user in database
-function validateUser(user) {
-	if (!users.find((u) => u.username === user.username)){
-		throw new Error(`User not found with name ${user.username}`);
-	}
+	var mostLiked = events.sort((a, b) => b.likeCount - a.likeCount)[0]
+	var top5 = events.sort((a, b) => b.likeCount - a.likeCount).slice(0, 5)
 
-	return true;
-}
+	var top5Chart = top5.map((e) => { return {name: e.name, value: e.likeCount} })
 
-// Creates token for password recovery
-function createRecoveryToken(user) {
-	try {
-		validateUser(user);
-
-		var token = crypto.randomBytes(16).toString('hex');
-
-		tokens.push({ username: user.username, token: token })
-
-		return token;
-	} catch (err) {
-		throw err;
-	}
-}
-
-// Retrieves token for password recovery
-function retrieveToken(token) {
-	var tokenObj = tokens.find((e) => e.token === token);
-
-	if (tokenObj === undefined) {
-		return false
-	}
-
-	var tkIndex = tokens.indexOf(tokenObj);
-	tokens.splice(tkIndex, 1)
-	return true
-}
-
-// Tries to authenticate the user using the username and password
-function authenticateUser(user) {
-	try {
-		validateUser(user)
-
-		var selUser = users.find((u) => u.username === user.username);
-		var hashedPasswd = hashPassword(user.password, selUser.salt);
-
-		if (hashedPasswd[0] === selUser.password) {
-			return createJWT(user.username) 
-		} else {
-			throw new Error("Invalid password");
+	var analytics = [
+		{
+			"metric": "Users",
+			"value": users.length,
+			"name": "Usuários",
+			"description": "Total de usuarios cadastrados"
+		},
+		{
+			"metric": "Events",
+			"value": events.length,
+			"name": "Eventos",
+			"description": "Total de eventos cadastrados"
+		},
+		{
+			"metric": "Likes",
+			"value": events.reduce((acc, e) => acc + e.likeCount, 0),
+			"name": "Likes",
+			"description": "Total de likes em eventos"
+		},
+		{
+			"metric": "MostLiked",
+			"value": mostLiked === undefined ? "N/A" : mostLiked.name,
+			"name": "Evento mais curtido",
+			"description": "Evento com mais likes"
+		},
+		{
+			"metric": "Top5",
+			"value": top5Chart,
+			"name": "Top 5",
+			"type": "chart",
+			"description": "Top 5 eventos"
 		}
+	];
 
-	} catch (err) {
-		throw err;
-	}
-}
+	res.status(200).json(analytics);
+});
 
-// Creates user
-function createUser(user) {
-	var [hashedPasswd, salt] = hashPassword(user.password);
+app.get("/events", (req, res) => {
+	res.status(200).json(eventHandler.getEvents());
+});
 
+app.post("/events", authenticationMiddleware, upload.single("image"), (req, res) => {
 	try {
-		if (users.find((u) => u.username === user.username)){
-			throw new Error("User already exists");
-		}
-
-		users.push({ username: user.username, password: hashedPasswd, salt: salt });
-
-		return users;
-	} catch(error) {
-		throw error;
-	};
-}
-
-// Creates hash for password
-function hashPassword(passwd, salt) {
-	if (!salt) {
-		var salt = crypto.randomBytes(32).toString('hex');
-	}
-	return [crypto.pbkdf2Sync(passwd, salt, 2000, 64, 'sha512').toString('hex'), salt];
-}
-
-app.post("/upload", authenticationMiddleware, upload.single("test"), (req, res) => {
-	try {
-		// Check if file was actually uploaded to the server
-		if (readFileSync(req.file.path)) {
-			res.status(200).send("Uploaded");		
-		} else {
-			throw new Error("File was not uploaded successfully")
-		}
+		var event = req.body
+		event = {imageURL: `${serverURL}/${req.file.path}`, ...event}
+		res.status(201).json(eventHandler.createEvent(event))
 	} catch (err) {
-		res.send(400).send({error: err.message })
+		res.status(500).json({error: err.message})
 	}
 });
 
-app.get("/secure", authenticationMiddleware, (req, res) => {
-	res.status(200).send("Authorized");
+app.delete("/events/:id", authenticationMiddleware, (req, res) => {
+	try {
+		var eventID = req.params.id
+		eventHandler.deleteEvent(eventID)
+		res.status(200).json(eventHandler.getEvents())
+	} catch (err) {
+		res.status(500).json({error: err.message})
+	}
+});
+
+app.patch("/events/:id", authenticationMiddleware, (req, res) => {
+	try {
+		var eventID = req.params.id
+		res.status(200).json(eventHandler.updateEvent(eventID, req.body))
+	} catch (err) {
+		res.status(500).json({error: err.message})
+	}
+});
+
+app.patch("/events/image/:id", authenticationMiddleware, upload.single("event"), (req, res) => {
+	try {
+		var eventID = req.params.id
+		res.status(200).json(eventHandler.updateEventImage(eventID, `${serverURL}/${req.file.path}`))
+	} catch (err) {
+		res.status(500).json({error: err.message})
+	}
+});
+
+app.patch("/events/like/:id", authenticationMiddleware, (req, res) => {
+	try {
+		var eventID = req.params.id
+		eventHandler.likeEvent(eventID)
+		res.status(200).send()
+	} catch (err) {
+		res.status(500).json({error: err.message})
+	}
 });
 
 app.post("/login", (req, res) => {
 	try {
-		var {user} = req.body 
-		var token = authenticateUser(user)
-
-		if (token != null) {
-			res.cookie('JWT_Auth', token, { maxAge: 900000, httpOnly: true })
-			res.status(200).send("Authorized");
-		} else {
-			res.status(500).send("Unauthorized");
-		}
+		var user = req.body;
+		var token = userHandler.authenticateUser(user)
+		
+		res.cookie('jwtToken', token, { maxAge: 7 * 24 * 60 * 60 * 60 * 1000, expires: 7 * 24 * 60 * 60 * 60 * 1000, httpOnly: true, secure: false });
+		
+		res.status(200).send();
 	} catch (err) {
-		res.status(500).send();
+		res.status(401).json({error: "Invalid credentials"});
 	}
 });
 
 app.post("/register", (req,res) => {
 	try {
 		var {user} = req.body;
+		
+		userHandler.createUser(user);
 
-		createUser(user);
-
-		res.status(201).send();
+		res.status(201).json();
 	} catch (err) {
-		res.status(400).send({error: err.message});
+		res.status(400).json({error: err.message});
 	}
 });
 
@@ -206,34 +194,48 @@ app.get("/recover/:token", (req, res) => {
 	try {
 		var {token} = req.params;
 
-		if(retrieveToken(token)) {
-			res.status(200).send("Token valid");
+		if(userHandler.retrieveToken(token)) {
+			res.status(200).json("Token valid");
 		} else {
-			res.status(400).send("Token not found or expired");
+			res.status(400).json("Token not found or expired");
 		}
 	} catch (err) {
-		res.status(400).send({error: err.message});
+		res.status(400).json({error: err.message});
 	}
 });
 
 app.post("/recover", (req,res) => {
 	try {
 		var {user} = req.body;
-
-		var token = createRecoveryToken(user);
-
+		
+		var token = userHandler.createRecoveryToken(user);
+		
 		if (token) {
-			res.status(201).send({token: token});
+			res.status(201).json({token: token});
 		} else {
-			res.status(400).send();
+			res.status(400).json();
 		}
 	} catch (err) {
-		res.status(400).send({error: err.message});
+		res.status(400).json({error: err.message});
+	}
+});
+
+app.get("/users", authenticationMiddleware, (req, res) => {
+	res.status(200).json(userHandler.getUsers());
+});
+
+app.delete("/users/:username", authenticationMiddleware, (req, res) => {
+	try {
+		var {username} = req.params;
+		userHandler.deleteUser({username: username});
+		res.status(200).json();
+	} catch (err) {
+		res.status(400).json({error: err.message});
 	}
 });
 
 app.listen(port, () => {
-	logger.info(`Example app listening at http://localhost:${port}`);
+	logger.info(`Backend listening at ${serverURL}`);
 });
 
 module.exports = app;
