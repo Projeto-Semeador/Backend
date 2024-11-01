@@ -31,7 +31,7 @@ async function init() {
 
 		// Event handler is initialized with the local storage handler
     const localStorageHandler = new LocalStorageHandler();
-    eventHandler = new EventHandler(localStorageHandler);
+    eventHandler = new EventHandler(localStorageHandler, dbHandler.connection);
   } catch (err) {
     logger.error(err);
   }

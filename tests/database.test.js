@@ -1,6 +1,8 @@
 const { default: mongoose } = require('mongoose');
 const DatabaseHandler = require('../util/databaseHandler');
 const UserHandler = require('../util/userHandler');
+const EventHandler = require('../util/eventHandler');
+const LocalStorageHandler = require('../util/localStorageHandler')
 
 describe('Database', () => {
     let dbHandler;
@@ -120,3 +122,71 @@ describe('User', () => {
         expect(deletedToken).toBe(true);
     });
 });
+
+describe('Event', () => {
+    let dbHandler;
+    let eventHandler;
+
+    beforeAll(async () => {
+        dbHandler = new DatabaseHandler();
+        await dbHandler.connect();
+        await dbHandler.dropDatabase();
+        const localStorageHandler = new LocalStorageHandler();
+
+        eventHandler = new EventHandler(localStorageHandler, dbHandler.connection);
+    });
+
+    afterAll(async () => {
+        await dbHandler.dropDatabase();
+        await dbHandler.disconnect();
+    });
+    
+    it('Should create an event', async() => {
+        var newEvent = await eventHandler.createEvent({
+            name: "a",
+            description: 'b',
+            imageURL: 'c',
+        })
+        expect(newEvent).toBeDefined()
+    })
+
+    it('Should get one event', async() => {
+        var newEvent = await eventHandler.createEvent({
+            name: "d",
+            description: 'e',
+            imageURL: 'f',
+        })
+
+        var event = await eventHandler.getEvent(newEvent._id);
+        expect(event).toBeDefined();
+    })
+
+    it('Should get all events', async() => {
+        var events = await eventHandler.getEvents();
+        expect(events.length).toBe(2)
+    })
+
+    it('Should delete an event', async() => {
+        var newEvent = await eventHandler.createEvent({
+            name: "x",
+            description: 'y',
+            imageURL: 'z',
+        })
+        
+        await eventHandler.deleteEvent(newEvent._id);
+
+        var events = await eventHandler.getEvents();
+        expect(events.length).toBe(2);
+    })
+
+    // it('Should like an event', async() => {
+    //     var newEvent = await eventHandler.createEvent({
+    //         name: "x",
+    //         description: 'y',
+    //         imageURL: 'z',
+    //     })
+    //     await eventHandler.likeEvent(newEvent._id)
+    //     var events = await eventHandler.getEvents();
+    //     expect(events.likeCount.sum()).toBe(1)
+    // })
+})

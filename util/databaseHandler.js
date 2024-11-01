@@ -37,7 +37,7 @@ class DatabaseHandler {
     // Connects to the database
     async connect(prod = false) {
         try {
-            await mongoose.connect(`${process.env.MONGODB_URL}/${prod ? 'prod' : 'test'}?retryWrites=true&w=majority&appName=osemeador`);
+            await mongoose.connect(`${process.env.MONGODB_URL}/${prod ? 'prod' : 'test'}?retryWrites=true&w=majority&appName=semeador-website`);
             this.connection = mongoose.connection;
         } catch (error) {
             throw error;
