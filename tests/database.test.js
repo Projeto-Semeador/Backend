@@ -1,121 +1,122 @@
+const { default: mongoose } = require('mongoose');
 const DatabaseHandler = require('../util/databaseHandler');
+const UserHandler = require('../util/userHandler');
 
-describe('DatabaseHandler', () => {
+describe('Database', () => {
     let dbHandler;
 
-    beforeAll(() => {
+    beforeEach(async () => {
         dbHandler = new DatabaseHandler();
+        await dbHandler.connect();
     });
 
-    describe('createUser', () => {
-        it('should create a new user if the user does not exist', () => {
-            // Mock the necessary methods and test the createUser function
+    describe('connection', () => {
+        it('should connect to the database', async () => {
+            expect(dbHandler.connectionStatus()).toBe(true);
         });
 
-        it('should throw an error if the user already exists', () => {
-            // Mock the necessary methods and test the createUser function
+        it('should disconnect from the database', async () => {
+            await dbHandler.disconnect();
+            expect(dbHandler.connectionStatus()).toBe(false);
         });
     });
+});
 
-    describe('retrieveUser', () => {
-        it('should retrieve a user by username if the user exists', () => {
-            // Mock the necessary methods and test the retrieveUser function
-        });
+describe('User', () => {
+    let dbHandler;
+    let userHandler;
 
-        it('should throw an error if the user does not exist', () => {
-            // Mock the necessary methods and test the retrieveUser function
-        });
+    beforeAll(async () => {
+        dbHandler = new DatabaseHandler();
+        await dbHandler.connect();
+        await dbHandler.dropDatabase();
+
+        userHandler = new UserHandler(dbHandler.connection);
     });
 
-    describe('getUsers', () => {
-        it('should retrieve all users', () => {
-            // Mock the necessary methods and test the getUsers function
-        });
+    afterAll(async () => {
+        await dbHandler.dropDatabase();
+        await dbHandler.disconnect();
     });
 
-    describe('deleteUser', () => {
-        it('should delete a user by username if the user exists', () => {
-            // Mock the necessary methods and test the deleteUser function
-        });
+    it('should create a user', async () => {
+        const user = {
+            username: 'testuser',
+            password: 'password',
+            role: 'user',
+        };
 
-        it('should throw an error if the user does not exist', () => {
-            // Mock the necessary methods and test the deleteUser function
-        });
+        await userHandler.createUser(user);
+
+        const users = await userHandler.getUsers();
+        expect(users.length).toBe(1);
     });
 
-    describe('createEvent', () => {
-        it('should create a new event if the event does not exist', () => {
-            // Mock the necessary methods and test the createEvent function
-        });
-
-        it('should throw an error if the event already exists', () => {
-            // Mock the necessary methods and test the createEvent function
-        });
+    it('should return bad request', async () => {
+        try {
+            await userHandler.createUser({ username: 'testuser', password: 'password', role: 'user' });
+        } catch (error) {
+            expect(error.message).toBe('User already exists with name testuser');
+        }
     });
 
-    describe('retrieveEvent', () => {
-        it('should retrieve an event by id if the event exists', () => {
-            // Mock the necessary methods and test the retrieveEvent function
-        });
+    it('should delete a user', async () => {
+        await userHandler.deleteUser({ username: 'testuser' });
 
-        it('should throw an error if the event does not exist', () => {
-            // Mock the necessary methods and test the retrieveEvent function
-        });
+        const users = await userHandler.getUsers();
+        expect(users.length).toBe(0);
     });
 
-    describe('getEvents', () => {
-        it('should retrieve all events', () => {
-            // Mock the necessary methods and test the getEvents function
-        });
+    it('should return bad request', async () => {
+        try {
+            await userHandler.deleteUser({ username: 'testuser' });
+        } catch (error) {
+            expect(error.message).toBe('User not found with name testuser');
+        }
     });
 
-    describe('deleteEvent', () => {
-        it('should delete an event by id if the event exists', () => {
-            // Mock the necessary methods and test the deleteEvent function
-        });
-
-        it('should throw an error if the event does not exist', () => {
-            // Mock the necessary methods and test the deleteEvent function
-        });
+    it('should not delete an admin user', async () => {
+        try {
+            await userHandler.createUser({ username: 'admin', password: 'password', role: 'admin' });
+            await userHandler.deleteUser({ username: 'admin' });
+        } catch (error) {
+            expect(error.message).toBe('Cannot delete admin user');
+        }
     });
 
-    describe('updateEvent', () => {
-        it('should update an event by id if the event exists', () => {
-            // Mock the necessary methods and test the updateEvent function
-        });
+    it('should create a recovery token', async () => {
+        const user = {
+            username: 'testuser',
+            password: 'password',
+            role: 'user',
+        };
 
-        it('should throw an error if the event does not exist', () => {
-            // Mock the necessary methods and test the updateEvent function
-        });
+        await userHandler.createUser(user);
+
+        const token = await userHandler.createRecoveryToken(user);
+
+        expect(token).toBeTruthy();
     });
 
-    describe('createToken', () => {
-        it('should create a new token if the token does not exist', () => {
-            // Mock the necessary methods and test the createToken function
-        });
-
-        it('should throw an error if the token already exists', () => {
-            // Mock the necessary methods and test the createToken function
-        });
+    it('should return bad request', async () => {
+        try {
+            await userHandler.createRecoveryToken({ username: 'teste123', password: 'password', role: 'user' });
+        } catch (error) {
+            expect(error.message).toBe('User not found with name teste123');
+        }
     });
 
-    describe('checkToken', () => {
-        it('should return true if the token exists', () => {
-            // Mock the necessary methods and test the checkToken function
-        });
+    it('should delete a token', async () => {
+        const user = {
+            username: 'testuser',
+            password: 'password',
+            role: 'user',
+        };
 
-        it('should return false if the token does not exist', () => {
-            // Mock the necessary methods and test the checkToken function
-        });
-    });
+        const token = await userHandler.createRecoveryToken(user);
 
-    describe('deleteToken', () => {
-        it('should delete a token by token if the token exists', () => {
-            // Mock the necessary methods and test the deleteToken function
-        });
+        const deletedToken = await userHandler.validateToken(token);
 
-        it('should throw an error if the token does not exist', () => {
-            // Mock the necessary methods and test the deleteToken function
-        });
+        expect(deletedToken).toBe(true);
     });
 });
