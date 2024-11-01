@@ -4,12 +4,12 @@ const cookieParser = require("cookie-parser");
 const multer = require("multer");
 const path = require("path");
 const cors = require("cors");
-const { readFileSync } = require("fs");
 const Logger = require("logosaurus");
 const UserHandler = require("./util/userHandler");
 const EventHandler = require("./util/eventHandler");
 const LocalStorageHandler = require("./util/localStorageHandler");
 const DatabaseHandler = require("./util/databaseHandler");
+const MailHandler = require("./util/mailHandler");
 
 const logger = new Logger(false, true);
 const app = express();
@@ -18,10 +18,12 @@ const serverURL = `http://localhost:${port}`;
 
 var userHandler;
 var eventHandler;
+var mailHandler;
 
 // Initializes all the handlers
 async function init() {
   try {
+    mailHandler = new MailHandler();
 		// Database handler is initialized with the production environment
     const dbHandler = new DatabaseHandler();
     await dbHandler.connect({ prod: true });
@@ -260,12 +262,14 @@ app.get("/recover/:token", (req, res) => {
   }
 });
 
-app.post("/recover", (req, res) => {
+app.post("/recover", async (req, res) => {
   try {
     var { user } = req.body;
 
-    var token = userHandler.createRecoveryToken(user);
-
+    var token = await userHandler.createRecoveryToken(user);
+    // TODO: Change the email to the user email
+    mailHandler.sendRecoveryEmail("projetoosemeador2024@gmail.com", token);
+	
     if (token) {
       res.status(201).json({ token: token });
     } else {

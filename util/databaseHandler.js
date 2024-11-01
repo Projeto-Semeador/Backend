@@ -7,7 +7,6 @@ class DatabaseHandler {
     // Drops the selected database (mostly used for testing)
     async dropDatabase() {
         try {
-            console.log(await mongoose.connection.db.databaseName);
             await mongoose.connection.db.dropDatabase();
         } catch (error) {
             throw error;
@@ -37,7 +36,7 @@ class DatabaseHandler {
     // Connects to the database
     async connect(prod = false) {
         try {
-            await mongoose.connect(`${process.env.MONGODB_URL}/${prod ? 'prod' : 'test'}?retryWrites=true&w=majority&appName=osemeador`);
+            await mongoose.connect(`${process.env.MONGODB_URL}/${prod ? 'prod' : 'test'}?retryWrites=true&w=majority&appName=semeador-website`);
             this.connection = mongoose.connection;
         } catch (error) {
             throw error;
