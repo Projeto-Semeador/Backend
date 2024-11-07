@@ -8,25 +8,10 @@ class EventHandler {
     #eventSchema = new mongoose.Schema({
         name: { type: String, required: true},
         description: { type: String, required: true},
+				date: { type: Date, required: true},
         likeCount: { type: Number, required: true},
         imageURL: { type: String, required: false}
     });
-    // #events = [
-    //     {
-    //         "id": 1,
-    //         "name": "Evento 1",
-    //         "description": "Descrição do evento 1",
-    //         "likeCount": 10,
-    //         "imageURL": "http://localhost:3000/uploads/event-1631877280854.png",
-    //     },
-    //     {
-    //         "id": 2,
-    //         "name": "Evento 2",
-    //         "description": "Descrição do evento 2",
-    //         "likeCount": 5,
-    //         "imageURL": "http://localhost:3000/uploads/event-1631877280854.png",
-    //     }
-    // ];
 
     async getEvent(eventID) {
         try {
@@ -58,17 +43,20 @@ class EventHandler {
             throw err;
         }
     }
-    // updateEvent(eventID, changes) {
-    //     var event = this.#events.find((e) => e.id == eventID);
+
+    async updateEvent(eventID, changes) {
+	try {
+		var event = await this.getEvent(eventID);
+		if (event !== undefined) {
+			return await this.#databaseConnection.model("Event", this.#eventSchema).update({ _id: eventID }, changes)
+		} else {
+			throw new Error("Event not found");
+		}
     
-    //     if (event !== undefined) {
-    //         var updatedEvent = {...event, ...changes}
-    //         this.#events[this.#events.indexOf(event)] = updatedEvent;
-    //         return updatedEvent
-    //     } else {
-    //         throw new Error("Event not found");
-    //     }
-    // }
+	} catch (err) {
+		throw err;
+	}
+    }
 
     // updateEventImage(eventID, newImage) {
     //     var event = this.#events.find((e) => e.id == eventID);

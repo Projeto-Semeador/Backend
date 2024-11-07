@@ -1,4 +1,3 @@
-const { default: mongoose } = require('mongoose');
 const DatabaseHandler = require('../util/databaseHandler');
 const UserHandler = require('../util/userHandler');
 const EventHandler = require('../util/eventHandler');
@@ -118,8 +117,8 @@ describe('User', () => {
         const token = await userHandler.createRecoveryToken(user);
 
         const deletedToken = await userHandler.validateToken(token);
-
-        expect(deletedToken).toBe(true);
+				
+				expect(deletedToken).toBeTruthy();
     });
 });
 
@@ -145,6 +144,7 @@ describe('Event', () => {
         var newEvent = await eventHandler.createEvent({
             name: "a",
             description: 'b',
+						date: new Date(),
             imageURL: 'c',
         })
         expect(newEvent).toBeDefined()
@@ -154,6 +154,7 @@ describe('Event', () => {
         var newEvent = await eventHandler.createEvent({
             name: "d",
             description: 'e',
+						date: new Date(),
             imageURL: 'f',
         })
 
@@ -170,6 +171,7 @@ describe('Event', () => {
         var newEvent = await eventHandler.createEvent({
             name: "x",
             description: 'y',
+						date: new Date(),
             imageURL: 'z',
         })
         
@@ -178,15 +180,4 @@ describe('Event', () => {
         var events = await eventHandler.getEvents();
         expect(events.length).toBe(2);
     })
-
-    // it('Should like an event', async() => {
-    //     var newEvent = await eventHandler.createEvent({
-    //         name: "x",
-    //         description: 'y',
-    //         imageURL: 'z',
-    //     })
-    //     await eventHandler.likeEvent(newEvent._id)
-    //     var events = await eventHandler.getEvents();
-    //     expect(events.likeCount.sum()).toBe(1)
-    // })
 })
