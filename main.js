@@ -33,7 +33,7 @@ async function init() {
 		userHandler = new UserHandler(dbHandler.connection);
 
 		// Event handler is initialized with the local storage handler
-		const localStorageHandler = new LocalStorageHandler();
+		const localStorageHandler = new LocalStorageHandler("./uploads/");
 		eventHandler = new EventHandler(localStorageHandler, dbHandler.connection);
 	} catch (err) {
 		logger.error(err);
@@ -167,10 +167,27 @@ app.get("/events", async (req, res) => {
 	res.status(200).json(await eventHandler.getEvents());
 });
 
+app.get("/events/:id", async (req, res) => {
+  try {
+    var eventID = req.params.id;
+    res.status(200).json(await eventHandler.getEvent(eventID));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/uploads/:file", (req, res) => {
+  try {
+    res.sendFile(path.join(__dirname, "uploads", req.params.file));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post(
 	"/events",
 	authenticationMiddleware,
-	upload.single("image"),
+	upload.single("event"),
 	async (req, res) => {
 		try {
 			var event = req.body;
@@ -204,7 +221,7 @@ app.patch("/events/:id", authenticationMiddleware, async (req, res) => {
 app.patch(
 	"/events/image/:id",
 	authenticationMiddleware,
-	upload.single("event"),
+	upload.single("image"),
 	(req, res) => {
 		try {
 			var eventID = req.params.id;
@@ -222,11 +239,10 @@ app.patch(
 	}
 );
 
-app.patch("/events/like/:id", authenticationMiddleware, (req, res) => {
+app.patch("/events/like/:id", async (req, res) => {
 	try {
 		var eventID = req.params.id;
-		eventHandler.likeEvent(eventID);
-		res.status(200).send();
+		res.status(200).json(await eventHandler.likeEvent(eventID));
 	} catch (err) {
 		res.status(500).json({ error: err.message });
 	}

@@ -8,14 +8,19 @@ class EventHandler {
     #eventSchema = new mongoose.Schema({
         name: { type: String, required: true},
         description: { type: String, required: true},
-				date: { type: Date, required: true},
+		date: { type: Date, required: true},
         likeCount: { type: Number, required: true},
         imageURL: { type: String, required: false}
     });
 
     async getEvent(eventID) {
         try {
-            return await this.#databaseConnection.model("Event", this.#eventSchema).findOne({ _id: eventID })
+            const event = await this.#databaseConnection.model("Event", this.#eventSchema).findOne({ _id: eventID });
+
+            if (event === null) {
+                throw new Error("Event not found");
+            }
+            return event
         }
         catch (err) {
             throw err;
@@ -37,6 +42,13 @@ class EventHandler {
 
     async deleteEvent(eventID) {
         try{
+            var event = await this.getEvent(eventID);
+            
+            if (event === undefined) {
+                throw new Error("Event not found");
+            }
+
+            this.#localStorageHandler.removeItem(path.basename(event.imageURL));
             return await this.#databaseConnection.model("Event", this.#eventSchema).deleteOne({_id: eventID})
         }
         catch(err){
@@ -45,43 +57,42 @@ class EventHandler {
     }
 
     async updateEvent(eventID, changes) {
-	try {
-		var event = await this.getEvent(eventID);
-		if (event !== undefined) {
-			return await this.#databaseConnection.model("Event", this.#eventSchema).update({ _id: eventID }, changes)
-		} else {
-			throw new Error("Event not found");
-		}
-    
-	} catch (err) {
-		throw err;
-	}
+        try {
+            var event = await this.getEvent(eventID);
+            if (event !== undefined) {
+                return await this.#databaseConnection.model("Event", this.#eventSchema).findOneAndUpdate({ _id: eventID }, changes)
+            } else {
+                throw new Error("Event not found");
+            }
+        
+        } catch (err) {
+            throw err;
+        }
     }
 
-    // updateEventImage(eventID, newImage) {
-    //     var event = this.#events.find((e) => e.id == eventID);
-        
-    //     if (event !== undefined) {
-    //         // Delete old image
-    //         rmSync(event.imageURL.replace(serverURL, "."))
-    //         var updatedEvent = {...event, imageURL: newImage}
-    //         this.#events[this.#events.indexOf(event)] = updatedEvent;
-    //         return updatedEvent
-    //     } else {
-    //         throw new Error("Event not found");
-    //     }
-    // }
+    async updateEventImage(eventID, imageURL) {
+        try {
+            var event = await this.getEvent(eventID);
+            if (event !== undefined) {
+                this.#localStorageHandler.removeItem(path.basename(event.imageURL));
+                return await this.#databaseConnection.model("Event", this.#eventSchema).findOneAndUpdate({ _id: eventID }, { imageURL: imageURL })
+            } else {
+                throw new Error("Event not found");
+            }
+        } catch (err) {
+            throw err;
+        }
+    }
 
-    // likeEvent(eventID) {
-    //     var event = this.#events.find((e) => e.id == eventID);
+    async likeEvent(eventID) {
+        var event = await this.#databaseConnection.model("Event", this.#eventSchema).findOne({ _id: eventID })
     
-    //     if (event !== undefined) {
-    //         var updatedEvent = {...event, likeCount: event.likeCount + 1}
-    //         this.#events[this.#events.indexOf(event)] = updatedEvent;
-    //     } else {
-    //         throw new Error("Event not found");
-    //     }
-    // }
+        if (event !== undefined) {
+            return await this.#databaseConnection.model("Event", this.#eventSchema).findOneAndUpdate({ _id: eventID }, {likeCount: event.likeCount + 1})
+        } else {
+            throw new Error("Event not found");
+        }
+    }
 
     constructor(localStorageHandler, conn) {
         this.#localStorageHandler = localStorageHandler;
