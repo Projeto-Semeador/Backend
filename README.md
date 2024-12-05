@@ -1,5 +1,5 @@
 <center>
-    <image src="./src/images/icon_SVG.svg" width="150" style="border-radius:20px"/>
+    <image src="./icon_SVG.svg" width="150" style="border-radius:20px"/>
 
 # Projeto Integrador Interdisciplinar (PII) - O Semeador
 
