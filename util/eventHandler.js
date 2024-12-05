@@ -1,85 +1,102 @@
 const path = require("path");
+const mongoose = require("mongoose");
 
 class EventHandler {
     #localStorageHandler;
-    #events = [
-        {
-            "id": 1,
-            "name": "Evento 1",
-            "description": "Descrição do evento 1",
-            "likeCount": 10,
-            "imageURL": "http://localhost:3000/uploads/event-1631877280854.png",
-        },
-        {
-            "id": 2,
-            "name": "Evento 2",
-            "description": "Descrição do evento 2",
-            "likeCount": 5,
-            "imageURL": "http://localhost:3000/uploads/event-1631877280854.png",
+    #databaseConnection;
+
+    #eventSchema = new mongoose.Schema({
+        name: { type: String, required: true},
+        description: { type: String, required: true},
+		date: { type: Date, required: true},
+        likeCount: { type: Number, required: true},
+        imageURL: { type: String, required: false}
+    });
+
+    async getEvent(eventID) {
+        try {
+            const event = await this.#databaseConnection.model("Event", this.#eventSchema).findOne({ _id: eventID });
+
+            if (event === null) {
+                throw new Error("Event not found");
+            }
+            return event
         }
-    ];
-
-    getEvents() {
-        return this.#events;
+        catch (err) {
+            throw err;
+        }
+    }
+    async getEvents() {
+        return await this.#databaseConnection.model("Event", this.#eventSchema).find();
     }
 
-    createEvent(event) {
-        var newEvent = {id: this.#events.length + 1, ...event, likeCount: 0}
-        this.#events.push(newEvent)
-        return newEvent
-    }
-
-    deleteEvent(eventID) {
-        var event = this.#events.find((e) => e.id == eventID); 
-    
-        if (event !== undefined) {
-            // Convert network path to local and delete image
-            this.#localStorageHandler.removeItem(path.parse(event.imageURL).base);
-            this.#events.splice(this.#events.indexOf(event), 1);
-        } else {
-            throw new Error("Event not found")
+    async createEvent(event) {
+        var newEvent = {...event, likeCount: 0}
+        try {
+            return await this.#databaseConnection.model("Event", this.#eventSchema).create(newEvent)
+        }
+        catch(err) {
+            throw err
         }
     }
 
-    updateEvent(eventID, changes) {
-        var event = this.#events.find((e) => e.id == eventID);
-    
-        if (event !== undefined) {
-            var updatedEvent = {...event, ...changes}
-            this.#events[this.#events.indexOf(event)] = updatedEvent;
-            return updatedEvent
-        } else {
-            throw new Error("Event not found");
+    async deleteEvent(eventID) {
+        try{
+            var event = await this.getEvent(eventID);
+            
+            if (event === undefined) {
+                throw new Error("Event not found");
+            }
+
+            this.#localStorageHandler.removeItem(path.basename(event.imageURL));
+            return await this.#databaseConnection.model("Event", this.#eventSchema).deleteOne({_id: eventID})
+        }
+        catch(err){
+            throw err;
         }
     }
 
-    updateEventImage(eventID, newImage) {
-        var event = this.#events.find((e) => e.id == eventID);
+    async updateEvent(eventID, changes) {
+        try {
+            var event = await this.getEvent(eventID);
+            if (event !== undefined) {
+                return await this.#databaseConnection.model("Event", this.#eventSchema).findOneAndUpdate({ _id: eventID }, changes)
+            } else {
+                throw new Error("Event not found");
+            }
         
-        if (event !== undefined) {
-            // Delete old image
-            rmSync(event.imageURL.replace(serverURL, "."))
-            var updatedEvent = {...event, imageURL: newImage}
-            this.#events[this.#events.indexOf(event)] = updatedEvent;
-            return updatedEvent
-        } else {
-            throw new Error("Event not found");
+        } catch (err) {
+            throw err;
         }
     }
 
-    likeEvent(eventID) {
-        var event = this.#events.find((e) => e.id == eventID);
+    async updateEventImage(eventID, imageURL) {
+        try {
+            var event = await this.getEvent(eventID);
+            if (event !== undefined) {
+                this.#localStorageHandler.removeItem(path.basename(event.imageURL));
+                return await this.#databaseConnection.model("Event", this.#eventSchema).findOneAndUpdate({ _id: eventID }, { imageURL: imageURL })
+            } else {
+                throw new Error("Event not found");
+            }
+        } catch (err) {
+            throw err;
+        }
+    }
+
+    async likeEvent(eventID) {
+        var event = await this.#databaseConnection.model("Event", this.#eventSchema).findOne({ _id: eventID })
     
         if (event !== undefined) {
-            var updatedEvent = {...event, likeCount: event.likeCount + 1}
-            this.#events[this.#events.indexOf(event)] = updatedEvent;
+            return await this.#databaseConnection.model("Event", this.#eventSchema).findOneAndUpdate({ _id: eventID }, {likeCount: event.likeCount + 1})
         } else {
             throw new Error("Event not found");
         }
     }
 
-    constructor(localStorageHandler) {
+    constructor(localStorageHandler, conn) {
         this.#localStorageHandler = localStorageHandler;
+        this.#databaseConnection = conn
     }
 }
 
